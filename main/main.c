@@ -538,7 +538,7 @@ void app_main(void) {
             esp_restart();
         }
     }
-    if (patch < 2 && !wifi_stack_get_version_mismatch()) {
+    if (patch < 2) {
         // Patch level 1: icons missing, attempt to download icons
         nvs_settings_set_firmware_patch_level(2);
         if (get_icons_missing()) {
@@ -547,6 +547,14 @@ void app_main(void) {
             vTaskDelay(pdMS_TO_TICKS(100));
             esp_restart();
         }
+    }
+    if (patch < 3 && wifi_stack_get_version_mismatch()) {
+        // Patch level 2: new radio update, attempt updating radio
+        nvs_settings_set_firmware_patch_level(3);
+        radio_ota_update();
+        bsp_power_set_radio_state(BSP_POWER_RADIO_STATE_OFF);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_restart();
     }
 
     // App start

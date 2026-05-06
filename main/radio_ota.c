@@ -15,6 +15,9 @@
 #include "wifi_connection.h"
 
 #ifdef CONFIG_BSP_TARGET_TANMATSU
+
+#define BASE_URL "https://ota.tanmatsu.cloud/radio2"
+
 #include "esptoolsquared.h"
 
 static const char* TAG = "Radio OTA";
@@ -125,7 +128,7 @@ esp_err_t radio_ota_update(void) {
 
     busy_dialog(get_icon(ICON_STOREFRONT), "Radio update", "Starting download...", true);
 
-    http_session_t session = http_session_begin("https://ota.tanmatsu.cloud/radio/");
+    http_session_t session = http_session_begin(BASE_URL "/");
     if (session == NULL) {
         message_dialog(get_icon(ICON_SYSTEM_UPDATE), "Radio update", "Failed to create HTTP session", "Quit");
         return ESP_FAIL;
@@ -134,8 +137,8 @@ esp_err_t radio_ota_update(void) {
     uint8_t* instructions_data = NULL;
     size_t   instructions_size = 0;
     http_session_set_callback(session, download_callback, "Downloading instructions...");
-    bool dl_res = http_session_download_ram(session, "https://ota.tanmatsu.cloud/radio/instructions.json",
-                                            &instructions_data, &instructions_size);
+    bool dl_res =
+        http_session_download_ram(session, BASE_URL "/instructions.json", &instructions_data, &instructions_size);
     if (!dl_res) {
         http_session_end(session);
         message_dialog(get_icon(ICON_SYSTEM_UPDATE), "Radio update", "Failed to download instructions", "Quit");
@@ -147,6 +150,12 @@ esp_err_t radio_ota_update(void) {
     ota_step_t steps[16]  = {0};
     int        step_count = cJSON_GetArraySize(instructions_json);
 
+    if (step_count < 1) {
+        http_session_end(session);
+        message_dialog(get_icon(ICON_SYSTEM_UPDATE), "Radio update", "Downloaded instructions were empty", "Quit");
+        return ESP_FAIL;
+    }
+
     for (int i = 0; i < step_count; i++) {
         cJSON* step_json           = cJSON_GetArrayItem(instructions_json, i);
         steps[i].offset            = (uint32_t)cJSON_GetObjectItem(step_json, "offset")->valueint;
@@ -154,7 +163,7 @@ esp_err_t radio_ota_update(void) {
         const char* filename       = cJSON_GetObjectItem(step_json, "file")->valuestring;
 
         char url[256] = {0};
-        sprintf(url, "https://ota.tanmatsu.cloud/radio/%s", filename);
+        sprintf(url, BASE_URL "/%s", filename);
         char message[256] = {0};
         sprintf(message, "Downloading firmware part %d of %d...", i + 1, step_count);
 
