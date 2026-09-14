@@ -61,6 +61,7 @@
 #include "sdkconfig.h"
 #include "timezone.h"
 #include "usb_device.h"
+#include "vfd.h"
 #include "wifi_connection.h"
 #include "wifi_remote.h"
 
@@ -475,6 +476,9 @@ void app_main(void) {
         startup_dialog("Error: Internal I2C bus failure");
         return;
     }
+
+    // Optional external VFD: an app may have left it on, the launcher doesn't use it
+    vfd_power_off();
 
     startup_dialog("Initializing coprocessor...");
     coprocessor_flash(false);

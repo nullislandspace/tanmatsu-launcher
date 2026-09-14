@@ -111,6 +111,7 @@ idf_component_register(
 		"global_event_handler.c"
 		"bootloader_update.c"
 		"synthwave.c"
+		"vfd.c"
 
 		${extra_sources}
 
