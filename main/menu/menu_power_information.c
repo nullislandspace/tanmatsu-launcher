@@ -7,6 +7,7 @@
 #include "driver/temperature_sensor.h"
 #include "gui_style.h"
 #include "icons.h"
+#include "menu/charger_current.h"
 #include "menu/menu_helpers.h"
 #include "menu/message_dialog.h"
 #include "pax_gfx.h"
@@ -15,7 +16,6 @@
 #include "pax_types.h"
 
 #define FOOTER_LEFT  ((gui_element_icontext_t[]){{get_icon(ICON_ESC), "/"}, {get_icon(ICON_F1), "Back"}}), 2
-#define FOOTER_RIGHT NULL, 0
 #define TEXT_FONT    pax_font_sky_mono
 #define TEXT_SIZE    18
 
@@ -27,9 +27,15 @@ static void render(void) {
 
     pax_vec2_t position = menu_calc_position(buffer, theme);
 
+    gui_element_icontext_t footer_right[1];
+    size_t                 footer_right_count = 0;
+    if (charger_current_setting_available()) {
+        footer_right[footer_right_count++] = (gui_element_icontext_t){get_icon(ICON_F6), "Charge current"};
+    }
+
     render_base_screen_statusbar(buffer, theme, true, true, true,
                                  ((gui_element_icontext_t[]){{get_icon(ICON_INFO), "Power information"}}), 1,
-                                 FOOTER_LEFT, FOOTER_RIGHT);
+                                 FOOTER_LEFT, footer_right, footer_right_count);
     char text_buffer[256];
     int  line = 0;
 
@@ -146,6 +152,12 @@ void menu_power_information(void) {
                             case BSP_INPUT_NAVIGATION_KEY_F1:
                             case BSP_INPUT_NAVIGATION_KEY_GAMEPAD_B:
                                 return;
+                            case BSP_INPUT_NAVIGATION_KEY_F6:
+                                if (charger_current_setting_available()) {
+                                    menu_charger_current();
+                                    render();
+                                }
+                                break;
                             default:
                                 break;
                         }

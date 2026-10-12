@@ -9,6 +9,7 @@
 #include "esp_app_desc.h"
 #include "esp_err.h"
 #include "lora.h"
+#include "menu/charger_current.h"
 #include "nvs_settings_hardware.h"
 #include "nvs_settings_lora.h"
 
@@ -26,6 +27,10 @@ esp_err_t device_settings_apply(void) {
     uint8_t led_brightness = 100;
     nvs_settings_get_led_brightness(&led_brightness, DEFAULT_LED_BRIGHTNESS);
     bsp_led_set_brightness(led_brightness);
+
+    // The charge controller default is lost on every coprocessor boot, so re-apply the stored value
+    charger_current_apply();
+
     return ESP_OK;
 }
 

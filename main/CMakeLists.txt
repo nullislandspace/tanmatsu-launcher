@@ -67,6 +67,7 @@ idf_component_register(
 		"menu/menu_repository_client_project.c"
 		"menu/menu_wifi_info.c"
 		"menu/menu_power_information.c"
+		"menu/charger_current.c"
 		"menu/menu_filebrowser.c"
 		"menu/menu_hardware_test.c"
 		"menu/menu_brightness.c"
