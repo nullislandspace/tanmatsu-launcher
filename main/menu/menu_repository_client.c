@@ -601,14 +601,14 @@ void menu_repository_client(char* category) {
 
     if (!wifi_stack_get_initialized()) {
         ESP_LOGE(TAG, "WiFi stack not initialized");
-        message_dialog(get_icon(ICON_STOREFRONT), "Repository: fatal error", "WiFi stack not initialized", "Quit");
+        message_dialog(get_icon(ICON_STOREFRONT), "Something went wrong", "WiFi stack not initialized", "Quit");
         return;
     }
 
     if (!wifi_connection_is_connected()) {
         if (wifi_connect_try_all() != ESP_OK) {
             ESP_LOGE(TAG, "Not connected to WiFi");
-            message_dialog(get_icon(ICON_STOREFRONT), "Repository: fatal error", "Failed to connect to WiFi network",
+            message_dialog(get_icon(ICON_STOREFRONT), "Something went wrong", "Failed to connect to WiFi network",
                            "Quit");
             return;
         }
@@ -618,11 +618,13 @@ void menu_repository_client(char* category) {
 
     char server[128] = {0};
     nvs_settings_get_repo_server(server, sizeof(server), DEFAULT_REPO_SERVER);
-    bool success = load_projects(server, &projects, category);
+    http_result_t result  = HTTP_RESULT_OTHER;
+    bool          success = load_projects(server, &projects, category, &result);
     if (!success) {
-        ESP_LOGE(TAG, "Failed to load projects");
-        message_dialog(get_icon(ICON_STOREFRONT), "Repository: fatal error", "Failed to load projects from server",
-                       "Quit");
+        ESP_LOGE(TAG, "Failed to load projects (result=%d)", result);
+        char msg[192];
+        repository_describe_load_failure(msg, sizeof(msg), "projects", result);
+        message_dialog(get_icon(ICON_STOREFRONT), "Something went wrong", msg, "Quit");
         return;
     }
 
@@ -698,10 +700,11 @@ void menu_repository_client(char* category) {
                                         break;
                                     }
 #ifdef CONFIG_ENABLE_LAUNCHERPLUGINS
-                                    menu_repository_client_project(buffer, theme, wrapper,
-                                                                   current_view_mode == VIEW_MODE_PLUGINS);
+                                    const char* needed_interpreter = menu_repository_client_project(
+                                        buffer, theme, wrapper, current_view_mode == VIEW_MODE_PLUGINS);
 #else
-                                    menu_repository_client_project(buffer, theme, wrapper, false);
+                                    const char* needed_interpreter =
+                                        menu_repository_client_project(buffer, theme, wrapper, false);
 #endif
                                     // Rebuild menu to refresh status markers (app may have been installed)
                                     menu_free(&menu);
@@ -711,6 +714,16 @@ void menu_repository_client(char* category) {
                                         pos = menu_get_length(&menu) - 1;
                                     }
                                     menu_set_position(&menu, pos);
+
+                                    // Installing the interpreter itself happens here, after
+                                    // menu_repository_client_project() has fully returned, rather
+                                    // than nested inside it: it involves its own HTTPS/TLS
+                                    // handshake, and stacking that inside an already-deep call
+                                    // chain overflowed the task's stack in practice.
+                                    if (needed_interpreter != NULL) {
+                                        menu_repository_client_prompt_install_interpreter(buffer, theme,
+                                                                                           needed_interpreter);
+                                    }
                                 }
                                 render(buffer, theme, &menu, server, false, true);
                                 break;
@@ -778,12 +791,17 @@ void menu_repository_client(char* category) {
                                 message_dialog_return_type_t msg_ret = adv_dialog_yes_no(
                                     get_icon(ICON_HELP), "Update all", "Update all apps with available updates?");
                                 if (msg_ret == MSG_DIALOG_RETURN_OK) {
+                                    int total = 0;
+                                    for (int j = 0; j < project_count; j++) {
+                                        if (project_statuses[j] == INSTALL_STATUS_UPDATE_AVAILABLE) total++;
+                                    }
+
                                     int updated = 0;
                                     int failed  = 0;
-                                    int total   = 0;
+                                    int index   = 0;
                                     for (int j = 0; j < project_count; j++) {
                                         if (project_statuses[j] != INSTALL_STATUS_UPDATE_AVAILABLE) continue;
-                                        total++;
+                                        index++;
                                         cJSON* wrapper  = get_project_by_index(projects.json, project_indices[j]);
                                         cJSON* slug_obj = wrapper ? cJSON_GetObjectItem(wrapper, "slug") : NULL;
                                         if (slug_obj == NULL) {
@@ -792,7 +810,7 @@ void menu_repository_client(char* category) {
                                         }
                                         char msg[64];
                                         snprintf(msg, sizeof(msg), "Updating %s (%d/%d)...", slug_obj->valuestring,
-                                                 updated + failed + 1, total);
+                                                 index, total);
                                         busy_dialog(get_icon(ICON_STOREFRONT), "Updating", msg, true);
                                         esp_err_t res = app_mgmt_install(server, slug_obj->valuestring,
                                                                          project_locations[j], download_callback);

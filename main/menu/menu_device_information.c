@@ -8,6 +8,7 @@
 #include "gui_element_footer.h"
 #include "gui_style.h"
 #include "icons.h"
+#include "lora.h"
 #include "menu/menu_helpers.h"
 #include "menu/message_dialog.h"
 #include "pax_gfx.h"
@@ -16,8 +17,12 @@
 #include "pax_types.h"
 #include "radio_system_protocol_client.h"
 
+extern bool           wifi_stack_get_initialized(void);
+extern lora_handle_t* lora_get_handle(void);
+
 #if defined(CONFIG_BSP_TARGET_TANMATSU)
 #include "bsp/tanmatsu.h"
+#include "dsi_panel_nicolaielectronics_st7701.h"
 #include "tanmatsu_coprocessor.h"
 #endif
 
@@ -70,9 +75,15 @@ static void render(pax_buf_t* buffer, gui_theme_t* theme, pax_vec2_t position, b
             snprintf(identity.vendor, sizeof(identity.vendor), "Unknown");
             identity.revision = 0;
             identity.radio    = DEVICE_VARIANT_RADIO_NONE;
-            snprintf(identity.region, sizeof(identity.region), "??");
+            memset(identity.region, 0, sizeof(identity.region));
             memset(identity.mac, 0, sizeof(identity.mac));
             memset(identity.uid, 0, sizeof(identity.uid));
+        }
+        if (identity.name[0] == '\0') {
+            snprintf(identity.name, sizeof(identity.name), "Unknown");
+        }
+        if (identity.vendor[0] == '\0') {
+            snprintf(identity.vendor, sizeof(identity.vendor), "Unknown");
         }
         pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
                       position.y0 + (TEXT_SIZE + 2) * (line++), "Hardware identity:");
@@ -83,18 +94,42 @@ static void render(pax_buf_t* buffer, gui_theme_t* theme, pax_vec2_t position, b
                  strcmp(identity.vendor, "Nicolai") != 0 ? identity.vendor : "Nicolai Electronics");
         pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
                       position.y0 + (TEXT_SIZE + 2) * (line++), text_buffer);
-        snprintf(text_buffer, sizeof(text_buffer), "Board revision:      %" PRIu8, identity.revision);
+        if (identity.revision == 0) {
+            snprintf(text_buffer, sizeof(text_buffer), "Board revision:      Unknown");
+        } else {
+            snprintf(text_buffer, sizeof(text_buffer), "Board revision:      %" PRIu8, identity.revision);
+        }
         pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
                       position.y0 + (TEXT_SIZE + 2) * (line++), text_buffer);
-        snprintf(text_buffer, sizeof(text_buffer), "Radio:               %s", get_radio_name(identity.radio));
+        // snprintf(text_buffer, sizeof(text_buffer), "Radio:               %s", get_radio_name(identity.radio));
+        // pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
+        //               position.y0 + (TEXT_SIZE + 2) * (line++), text_buffer);
+        if (!wifi_stack_get_initialized()) {
+            snprintf(text_buffer, sizeof(text_buffer), "LoRa module:         Unavailable");
+        } else {
+            lora_protocol_status_params_t lora_status = {0};
+            if (lora_get_status(lora_get_handle(), &lora_status) == ESP_OK) {
+                snprintf(text_buffer, sizeof(text_buffer), "LoRa module:         %s",
+                         lora_status.chip_type == LORA_PROTOCOL_CHIP_SX1268 ? "E22-400M22S (SX1268)" : "E22-900M22S (SX1262)");
+            } else {
+                snprintf(text_buffer, sizeof(text_buffer), "LoRa module:         Unavailable");
+            }
+        }
         pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
                       position.y0 + (TEXT_SIZE + 2) * (line++), text_buffer);
         snprintf(text_buffer, sizeof(text_buffer), "Color:               %s", get_color_name(identity.color));
         pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
                       position.y0 + (TEXT_SIZE + 2) * (line++), text_buffer);
-        snprintf(text_buffer, sizeof(text_buffer), "Region:              %s", identity.region);
+        snprintf(text_buffer, sizeof(text_buffer), "Region:              %s",
+                 identity.region[0] == '\0' ? "Unknown" : identity.region);
         pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
                       position.y0 + (TEXT_SIZE + 2) * (line++), text_buffer);
+#if defined(CONFIG_BSP_TARGET_TANMATSU)
+        snprintf(text_buffer, sizeof(text_buffer), "LCD type:            %s",
+                 st7701_is_display_variant_2() ? "SW39480800PN03-01-1" : "LH397K-IC01");
+        pax_draw_text(buffer, theme->palette.color_foreground, TEXT_FONT, TEXT_SIZE, position.x0,
+                      position.y0 + (TEXT_SIZE + 2) * (line++), text_buffer);
+#endif
         snprintf(text_buffer, sizeof(text_buffer), "APP SOC UID:         ");
         for (size_t i = 0; i < 16; i++) {
             snprintf(text_buffer + strlen(text_buffer), sizeof(text_buffer) - strlen(text_buffer), "%02x",
